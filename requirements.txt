@@ -1,0 +1,12 @@
+# Core Framework
+langchain-core>=0.3.0
+deepagents>=0.5.10
+langchain-google-genai>=2.0.0
+
+# Tools & Integrations
+tavily-python>=0.4.0               # Tavily search
+requests>=2.31.0                   # API calls (e.g. OpenWeatherMap)
+geopy==2.4.1                       # Geocoding
+
+# Utilities
+python-dotenv>=1.0.1               # For loading .env file
