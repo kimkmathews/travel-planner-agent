@@ -1,78 +1,70 @@
 # Travel Planner Multi-Agent System
 
-The Travel Planner is a multi-agent system built using the `deepagents` framework and `langchain`, utilizing LLMs (like Groq/Llama models) to automatically research and compile detailed, budget-conscious travel itineraries based on natural language queries.
+The Travel Planner is a multi-agent system built using the `deepagents` framework and `langchain`, utilizing LLMs (like Google's Gemini models) to automatically research and compile detailed, budget-conscious travel itineraries based on natural language queries. It features a conversational interface with session management and structured output.
 
-## 🔄 Multi-Agent Workflow
+## 🔄 Current Architecture & Workflow
 
-The system follows a highly structured, hierarchical "Supervisor-Worker" workflow:
+The system follows a highly structured, hierarchical "Supervisor-Worker" architecture:
 
-1. **Information Extraction**: When a user submits a query (e.g., *"Plan a 5-day family trip to Singapore in January 2026..."*), a lightweight extractor LLM parses the natural language into structured JSON data (destination, travel dates, party size, budget, preferences).
-2. **Supervisor Orchestration**: A dynamic prompt is generated for the main **Supervisor Agent**. The Supervisor is strictly instructed to orchestrate the process by creating a 5-step task list (`todos.txt`).
-3. **Delegation to Subagents**: The Supervisor delegates specific research tasks to specialized worker subagents.
-4. **Parallel Research & File Writing**:
-   - The **Weather Specialist** fetches forecasts and writes findings to `weather.txt`.
-   - The **Research Specialist** looks up attractions, restaurants, and real-time costs, writing the data to `attractions.txt`, `food.txt`, and `costs.txt`.
-5. **Synchronization**: The Supervisor monitors the workspace and waits until all required research files exist in the `data/temp` directory.
-6. **Final Compilation**: Once the research phase is complete, the Supervisor spawns the **Itinerary Compiler** subagent. This final agent reads all the text files and synthesizes them into a beautifully formatted, budget-aware, day-by-day itinerary saved as `final_itinerary.txt`.
+1. **User Request & Session Management**: The user provides a travel query through a conversational CLI interface (`main.py`). The interaction is managed by `TravelPlannerSession`, allowing for follow-up questions and persistent memory across the session.
+2. **Supervisor Orchestration**: The main **Supervisor Agent** analyzes the request and creates a structured 4-step plan using the `write_todos` skill.
+3. **Task Delegation**: The Supervisor directly delegates specific tasks to specialized worker subagents via the `task` tool:
+   - **Weather Specialist**: Receives the destination and travel month, fetching relevant weather forecasts.
+   - **Research Specialist**: Receives trip details to look up real attractions, restaurants, and current prices.
+4. **Context Passing**: Instead of writing to intermediate files, the subagents return their findings directly to the Supervisor as strings. The Supervisor collects these responses in its conversation history.
+5. **Final Compilation**: The Supervisor passes the complete findings from the weather and research specialists directly to the **Itinerary Compiler** subagent.
+6. **Structured Output**: The Compiler synthesizes the data into a final itinerary. The system extracts a structured format (`FinalItinerary`) to provide a clean, visually appealing summary in the console, including cost breakdowns and budget checks.
 
 ## 🤖 Agents & Functionalities
 
 The application utilizes four distinct agent personas:
 
-1. **Supervisor Agent**: The orchestrator. It creates the plan, manages the subagents, ensures the workflow is followed sequentially, and enforces the user's budget and constraints.
-2. **Weather Specialist**: A focused agent that solely handles meteorology. It uses location data to pull upcoming weather forecasts and provides practical advice based on the weather.
-3. **Research Specialist**: The heavy lifter for data gathering. It finds family-friendly activities, local cuisine, and looks up *real* current prices for hotels, flights, and food to prevent the LLM from hallucinating costs.
-4. **Itinerary Compiler**: The synthesizer. It takes the raw, scattered research data from the other agents and formats it into a cohesive, realistic day-by-day travel plan.
+1. **Supervisor Agent**: The orchestrator. It manages the subagents, ensures the workflow is followed sequentially, passes context between them, and enforces the user's budget and constraints.
+2. **Weather Specialist**: A focused agent that solely handles meteorology. It pulls upcoming weather forecasts and provides practical packing and travel advice.
+3. **Research Specialist**: The heavy lifter for data gathering. It finds family-friendly activities, local cuisine, and looks up real current prices to prevent the LLM from hallucinating costs.
+4. **Itinerary Compiler**: The synthesizer. It takes the raw research data and formats it into a cohesive, realistic day-by-day travel plan.
 
-## 🧰 Tools Available to Agents
+## 🚀 How to Run the Project
 
-The agents have access to a specific set of tools (found in `src/tools/`) to interact with the outside world and the local filesystem:
+### Prerequisites
 
-*   **`get_weather_forecast`**: Hits the OpenWeatherMap API to get up-to-date temperature and rain forecasts for the destination.
-*   **`internet_search`**: Uses the Tavily API to search the web for general travel information and blogs.
-*   **`search_places` / `osm_places`**: Uses OpenStreetMap's Nominatim geocoder to find exact points of interest, coordinates, and nearby locations.
-*   **`research_costs`**: A specialized Tavily web search customized to find current pricing data. It strictly scopes its search to reliable aggregators like TripAdvisor, Booking.com, Kayak, and Agoda to ensure the budget is realistic.
-*   **File Operations (`file_tools.py`)**: Tools like `list_files`, `read_file`, `write_file`, and `append_to_file`. These are critical because the agents communicate and pass state to one another asynchronously by reading and writing text files in the `data/temp/` directory.
+To run this project, you will need to sign up for several API keys. Create a `.env` file in the root directory (you can copy `.env.example` as a template) and add the following keys:
 
-## 🚀 Usage Examples
+1. **Google API Key (Gemini)**:
+   - Used for the LLM models driving the agents.
+   - Get it here: [Google AI Studio](https://aistudio.google.com/)
+2. **Tavily API Key**:
+   - Used by the Research Specialist for general web search and finding current pricing.
+   - Get it here: [Tavily](https://tavily.com/)
+3. **SerpAPI Key**:
+   - Used for Google Search integrations to look up specific places or flights.
+   - Get it here: [SerpAPI](https://serpapi.com/)
+4. **OpenWeather API Key**:
+   - Used by the Weather Specialist to fetch real-time and historical weather data.
+   - Get it here: [OpenWeather](https://openweathermap.org/api)
+5. **LangSmith API Key (Optional)**:
+   - Useful for tracing, debugging, and monitoring the agents' thought processes.
+   - Get it here: [LangSmith](https://smith.langchain.com/)
+   - To enable tracing, set `LANGCHAIN_TRACING_V2=true` in your `.env`.
 
-### 1. Planning a Family Vacation
-```python
-from src.agents.supervisor import create_travel_agent
-from langchain_core.messages import HumanMessage
+### Installation
 
-user_query = """Plan a 5-day family trip to Singapore in January 2026 for 2 adults and 2 kids. 
-Budget: ₹200,000. We love beaches, food, and light adventure."""
+1. Clone the repository and navigate to the project directory.
+2. Create and activate a Python virtual environment (recommended).
+3. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Initialize the supervisor agent
-supervisor_agent = create_travel_agent(user_query)
+### Usage
 
-# Run the agent
-for chunk in supervisor_agent.stream({"messages": [HumanMessage(content=user_query)]}, stream_mode="values"):
-    # Stream the output and track progress
-    print(chunk)
-```
-*The agent will generate a family-friendly itinerary, ensuring that activities are suitable for children and the total cost stays within the ₹200,000 budget.*
-
-### 2. Budget-Strict Solo Travel
-```python
-from src.agents.supervisor import create_travel_agent
-from langchain_core.messages import HumanMessage
-
-user_query = """I want a 3-day solo trip to Goa, India in December 2025.
-My absolute maximum budget is ₹15,000. Find me cheap hostels, local street food, and free beaches."""
-
-supervisor_agent = create_travel_agent(user_query)
-# The Research Specialist will prioritize finding accurate, low-cost options to respect the strict budget.
-```
-
-### 3. Running the Main Script
-You can directly run the main script to see the agent in action based on the default query.
+Run the main chat interface:
 ```bash
 python main.py
 ```
-This will:
-1. Clear the `data/temp` workspace.
-2. Initialize the agent with the hardcoded query.
-3. Stream the agent's thought process, tool calls, and subagent delegations to the console.
-4. Finally, output the compiled itinerary.
+
+- Type your travel query to begin (e.g., *"Plan a 5-day family trip to Singapore in January 2026 for 2 adults and 2 kids. Budget: ₹200,000."*).
+- After the first itinerary is generated, you can ask follow-up questions freely to modify the plan.
+- To start a new session, type `new session`.
+- To resume a previous session, run: `python main.py --session=<session_id>`.
+- Type `quit` or `exit` to close the application.
