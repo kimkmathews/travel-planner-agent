@@ -1,12 +1,24 @@
-# Core Framework
-langchain-core>=0.3.0
+# Core framework
 deepagents>=0.5.10
+langchain-core>=0.3.0
+langchain>=0.3.0
+langgraph>=0.2.0
+
+# Model providers
 langchain-google-genai>=2.0.0
 
-# Tools & Integrations
-tavily-python>=0.4.0               # Tavily search
-requests>=2.31.0                   # API calls (e.g. OpenWeatherMap)
-geopy==2.4.1                       # Geocoding
+# Tool integrations
+tavily-python>=0.4.0
+requests>=2.31.0
+geopy==2.4.1
+
+# Persistence (production checkpointing)
+# langgraph-checkpoint-sqlite>=1.0.0    # Uncomment for SQLite persistence
+# langgraph-checkpoint-postgres>=1.0.0  # Uncomment for PostgreSQL
+
+# Observability (strongly recommended)
+# langsmith>=0.1.0                      # Uncomment and set LANGSMITH_API_KEY
 
 # Utilities
-python-dotenv>=1.0.1               # For loading .env file
+python-dotenv>=1.0.1
+pydantic>=2.0.0

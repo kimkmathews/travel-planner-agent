@@ -1,71 +1,79 @@
-# main.py
 from dotenv import load_dotenv
 load_dotenv()
-import time  
-import shutil
-import os
 
-# --- Rate limiting patch for Google GenAI ---
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
-_original_generate = ChatGoogleGenerativeAI._generate
-def _rate_limited_generate(*args, **kwargs):
-    time.sleep(4.1) # Sleep to respect 15 requests/minute quota
-    return _original_generate(*args, **kwargs)
-ChatGoogleGenerativeAI._generate = _rate_limited_generate
-# --------------------------------------------
+import sys
+from src.session.manager import TravelPlannerSession
 
-# Clear workspace
-if os.path.exists("data/temp"):
-    shutil.rmtree("data/temp")
-os.makedirs("data/temp", exist_ok=True)
-os.makedirs("data/itineraries", exist_ok=True)
 
-from src.agents.supervisor import create_travel_agent
-from langchain_core.messages import HumanMessage
+def print_itinerary_summary(result: dict):
+    """Print a clean summary of the structured itinerary."""
+    itinerary = result.get("structured_itinerary")
+    if not itinerary:
+        return
 
-print("🧳 Deep Agents Travel Planner Starting...\n")
+    print(f"\n{'='*60}")
+    print(f"🗺️  {itinerary.trip_title}")
+    print(f"{'='*60}")
+    print(f"📅 {itinerary.duration_days} days | {itinerary.travel_month}")
+    print(f"👨‍👩‍👦 {itinerary.party}")
+    print(f"🌤️  {itinerary.weather_summary}")
+    print(f"\n💰 Cost Summary:")
+    cb = itinerary.cost_breakdown
+    print(f"   Flights:        ₹{cb.flights_inr:>8,}")
+    print(f"   Accommodation:  ₹{cb.accommodation_inr:>8,}")
+    print(f"   Meals:          ₹{cb.meals_inr:>8,}")
+    print(f"   Activities:     ₹{cb.activities_inr:>8,}")
+    print(f"   Transport/Misc: ₹{cb.transport_misc_inr:>8,}")
+    print(f"   {'─'*28}")
+    print(f"   TOTAL:          ₹{cb.total_inr:>8,}  {'✅ Under budget' if cb.is_within_budget else '❌ Over budget'}")
 
-user_query = """Plan a 5-day family trip to Phu Quoc from Kochi in November 2026 for 2 adults and 1 kids.
-Budget: ₹200,000. We love beaches, food, and light adventure."""
+    if result.get("warnings"):
+        print(f"\n⚠️  Data quality warnings:")
+        for w in result["warnings"]:
+            print(f"   {w}")
 
-# Create agent with dynamic extraction
-supervisor_agent = create_travel_agent(user_query)
+    print(f"\n📎 Sources consulted: {len(itinerary.data_sources)}")
+    print(f"{'='*60}\n")
 
-inputs = {"messages": [HumanMessage(content=user_query)]}
 
-print(f"User: {user_query}\n")
-print("Agent thinking...\n")
+def main():
+    print("🧳 Travel Planner AI — Chat Interface")
+    print("   Type your travel query to begin, or 'quit' to exit.")
+    print("   After the first itinerary, ask follow-up questions freely.\n")
 
-from langchain_core.messages import AIMessage, ToolMessage
+    session = None
 
-for chunk in supervisor_agent.stream(inputs, stream_mode="values"):
-    messages = chunk.get("messages", [])
-    if messages:
-        last_msg = messages[-1]
-        
-        if isinstance(last_msg, AIMessage):
-            # Handle string vs list content (Google GenAI can return lists with 'thinking' blocks)
-            if isinstance(last_msg.content, list):
-                for block in last_msg.content:
-                    if isinstance(block, dict):
-                        if block.get("type") == "thinking":
-                            print(f"🧠 [Agent Thinking]:\n{block.get('thinking', '')}")
-                        elif block.get("type") == "text":
-                            print(f"🤖 [Agent Output]:\n{block.get('text', '')}")
-            elif last_msg.content:
-                print(f"🤖 [Agent Output]:\n{last_msg.content}")
-            
-            # Show tool calls
-            if hasattr(last_msg, 'tool_calls') and last_msg.tool_calls:
-                for tool_call in last_msg.tool_calls:
-                    print(f"🛠️ [Calling Tool]: {tool_call.get('name', 'Unknown')}")
-                    print(f"   Inputs: {tool_call.get('args', {})}")
-            
-            print("\n" + "-"*70 + "\n")
-            
-        elif isinstance(last_msg, ToolMessage):
-            content_str = str(last_msg.content)
-            if len(content_str) > 1000:
-                content_str = content_str[:1000] + "\n... [Output Truncated for readability]"
-            print(f"✅ [Tool Output] (from '{last_msg.name}'):\n{content_str}")
-            print("\n" + "-"*70 + "\n")
+    # Optional: restore existing session
+    if len(sys.argv) > 1 and sys.argv[1].startswith("--session="):
+        existing_id = sys.argv[1].split("=")[1]
+        session = TravelPlannerSession.restore(existing_id)
+        print(f"   Restored session {existing_id}. Continue your conversation.\n")
+
+    while True:
+        try:
+            user_input = input("You: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nGoodbye! 👋")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in ("quit", "exit", "bye"):
+            print("Goodbye! 👋")
+            break
+        if user_input.lower() == "new session":
+            session = None
+            print("✨ Starting new session.\n")
+            continue
+
+        # Create session on first message
+        if session is None:
+            session = TravelPlannerSession()
+            print(f"   (Save your session ID to resume later: {session.thread_id})\n")
+
+        result = session.chat(user_input, stream=True)
+        print_itinerary_summary(result)
+
+
+if __name__ == "__main__":
+    main()
